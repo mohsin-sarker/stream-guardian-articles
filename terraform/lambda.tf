@@ -22,7 +22,7 @@ resource "aws_lambda_function" "guardian_lambda_function" {
 
   environment {
     variables = {
-      GUARDIAN_API_KEY = var.guardian_api_key
+      SECRET_NAME = aws_secretsmanager_secret.guardian_api_key_secret.name
       SQS_QUEUE_URL = aws_sqs_queue.guardian_queue.url
     }
   }
