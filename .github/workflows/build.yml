@@ -54,6 +54,11 @@ jobs:
     needs: build
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Install dependencies for Lambda
         run: |
           pip install --no-cache-dir -r src/requirements.txt -t package/
