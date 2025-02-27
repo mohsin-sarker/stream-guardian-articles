@@ -2,9 +2,14 @@ import pytest
 import boto3
 import json
 import os
+import logging
 from moto import mock_aws
-from unittest.mock import Mock, patch
-from src.lambda_handler import get_guardian_api_key
+from unittest.mock import patch, MagicMock
+from src.lambda_handler import (
+                                GuardianAPIError,
+                                get_guardian_api_key,
+                                extract_guardian_articles
+                            )
 
 
 
@@ -45,6 +50,45 @@ def create_secret(sm_client):
     return secret_name
 
 
+@pytest.fixture(scope='function')
+def mock_guardian_articles():
+    mock_data = {
+        "response" : {
+            "results" : [
+                {
+                    "webPublicationDate": "2023-11-21T11:11:31Z",
+                    "webTitle": "Who said what: using machine learning to correctly attribute quotes",
+                    "webUrl": "https://www.theguardian.com/info/2023/nov/21/who-said-what-using-machine-learning"
+                },
+                {
+                    "webPublicationDate": "2023-11-21T11:11:31Zyziur1234",
+                    'webTitle': 'Machine Learning Breakthrough',
+                    'webUrl': 'https://example.com/article1'
+                }
+            ]
+        }
+    }
+    mock_response = MagicMock()
+    mock_response.json.return_value = mock_data
+    mock_response.status_code = 200
+    
+    return mock_response, mock_data['response']['results']
+
+
+@pytest.fixture(scope='function')
+def mock_empty_articles():
+    mock_data = {
+        "response" : {
+            "results" : []
+        }
+    }
+    mock_response = MagicMock()
+    mock_response.json.return_value = mock_data
+    mock_response.status_code = 200
+    
+    return mock_response, mock_data['response']['results']
+
+
 class TestSecretsManager:
     
     @pytest.mark.it('Funtion will return secret value from AWS Secret Manager')
@@ -72,3 +116,55 @@ class TestSecretsManager:
         
         # Assert
         assert result == 'There has been Client Error: ResourceNotFound'
+        
+        
+class TestExtractGuardianArticles:
+    
+    @pytest.mark.it('Test returns value error if there is empty search term or invalid type.')
+    def test_extract_guardian_articles_return_value_error(self):
+        search_term = ''
+        with pytest.raises(ValueError, match='Invalid search_term or it must not be empty!'):
+            extract_guardian_articles(search_term)
+
+    
+    @pytest.mark.it('Test returns customed API Error if invalid secret name.') 
+    def test_extract_guardian_articles_return_invalid_or_empty_secret_name(self):
+        with patch.dict(os.environ, {}, clear=True):
+            with pytest.raises(GuardianAPIError, match='It must not be an empty secret name!'):
+                extract_guardian_articles('machine learning')
+    
+    
+    @pytest.mark.it('Test returns API Error with correct secret name but no API KEY.')
+    def test_extract_guardian_articles_return_api_error_with_correct_secret_name_but_no_api_key(self):
+        with patch.dict(os.environ, {'SECRET_NAME': 'mock_secret_name'}):
+            with patch('src.lambda_handler.get_guardian_api_key', return_value=None):
+                with pytest.raises(GuardianAPIError, match='Unable to fetch API KEY, check secret_name!'):
+                    extract_guardian_articles('machine learning')
+                    
+                    
+    @pytest.mark.it('Test fetches data with valid API KEY.')
+    def test_extract_guardian_articles_fetches_data_with_valid_api_key(self, mock_guardian_articles):
+        # unpack mock response and expected data
+        mock_response, expected_data = mock_guardian_articles
+        with patch.dict(os.environ, {'SECRET_NAME': 'mock_secret_name'}):
+            with patch('src.lambda_handler.get_guardian_api_key', return_value='valid_api_key'):
+                with patch('requests.get', return_value=mock_response):
+                    result = extract_guardian_articles('machine learning')
+                    assert result == expected_data
+    
+    
+    
+    @pytest.mark.it('Test fetches an empty article list with valid API KEY if there are no data.')
+    def test_extract_guardian_articles_fetches_empty_article_list_with_valid_api_key(self, mock_empty_articles):
+        # unpack mock response and expected data
+        mock_response, expected_data = mock_empty_articles
+        
+        with patch.dict(os.environ, {'SECRET_NAME': 'mock_secret_name'}):
+            with patch('src.lambda_handler.get_guardian_api_key', return_value='valid_api_key'):
+                with patch('requests.get', return_value=mock_response):
+                        result = extract_guardian_articles('machine learning')
+                        assert result == expected_data
+                        
+
+class TestTransformArticlesData:
+    pass                    
