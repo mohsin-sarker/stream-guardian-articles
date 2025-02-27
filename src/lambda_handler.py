@@ -7,9 +7,24 @@ from botocore.exceptions import ClientError, NoCredentialsError
 from pprint import pprint
 
 
+# Intialise logging to log in info to cloudwatch
+logger = logging.getLogger('Guardian_articles_lambda_logger')
+logger.setLevel(logging.INFO)
+
+
+# Get search_term and date_from from environment variables 
+get_search_term = os.environ.get('machine learning')
+date_from = os.environ.get('2025-01-31')
+
+class GuardianAPIError(Exception):
+    pass
+
+class NoArticlesFoundError(Exception):
+    pass
+
+
 def lambda_handler(event, context):
-    logger = logging.getLogger('guardian articles logger')
-    logger.info('Guardian article has been invoked!')
+    logger.info('Function has been invoked!')
 
 
 
@@ -64,25 +79,70 @@ def extract_guardian_articles(search_term, date_from=None):
         A list of dictionaries, where each dictionary represents an article.
         Returns an empty list if there's an issue with the API call.
     """
-    # 
+    # Search Term validation check
+    if not isinstance(search_term, str) or not search_term.strip():
+        error_message = 'Invalid search_term or it must not be empty!'
+        logger.error(error_message)
+        raise ValueError(error_message)
+
+    # Retrieve secret name and check validation
     secret_name = os.environ.get('SECRET_NAME')
-    guardian_api_key = get_guardian_api_key(secret_name)
-    search_url = 'https://content.guardianapis.com/search'
     
+    if not secret_name:
+        error_message = 'It must not be an empty secret name!'
+        raise GuardianAPIError(error_message)
+
+    # Get the API KEY and define API endpoint
+    guardian_api_key = get_guardian_api_key(secret_name)
+    if not guardian_api_key:
+        error_message = 'Unable to fetch API KEY, check secret_name!'
+        raise GuardianAPIError(error_message)
+    
+    search_url = 'https://content.guardianapis.com/search'
+
     params = {
         "q": search_term,
         "from-date": date_from,
         "api-key": guardian_api_key,
-        "page_size": 10
+        "page_size": 10,
+        "order-by": "newest"
     }
     
-    response = requests.get(search_url, params=params)
-    response.raise_for_status()
-    data = response.json()
+    try:
+        response = requests.get(search_url, params=params)
+        response.raise_for_status()
+        data = response.json()
+        
+        if 'response' not in data or 'results' not in data['response']:
+            error_message = 'Unexcepted API response'
+            logger.error(error_message)
+            raise GuardianAPIError(error_message)
+        
+        articles = [article for article in data['response']['results']]
+        if not articles:
+            error_message = f'No articles found with the Search Term: {search_term}'
+            logger.warning(error_message)
+            return []
+            
+        return articles
     
-    articles = [article for article in data['response']['results']]
-    return articles
+    except requests.exceptions.Timeout as Timeout_error:
+        error_message = f'Raise Timeout Error: {Timeout_error}'
+    
+    except requests.exceptions.ConnectionError as conn_err:
+        error_message = f'Connection Error: {conn_err}'
+    
+    except Exception as e:
+        error_message = f'Exception: {e}'
+        
+    logger.error(error_message)
+    raise GuardianAPIError(error_message)
 
+
+
+def transform_articles():
+    articles = extract_guardian_articles(get_search_term)
+    return articles
 
 
 def send_to_sqs(articles):
@@ -95,4 +155,5 @@ def send_to_sqs(articles):
             MessageBody=json.dumps(article)
         )
         print(response['MessageId'])
+
 
