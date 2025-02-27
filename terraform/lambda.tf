@@ -3,13 +3,6 @@
             ### Resources for Lambda Function ###
             #####################################
 
-# # Archive a single file.
-# data "archive_file" "lambda_zip" {
-#   type        = "zip"
-#   source_file = "${path.module}/../src/lambda_handler.py"
-#   output_path = "${path.module}/../packages/lambda_function.zip"
-# }
-
 # Archive a directory to create a package.
 data "archive_file" "lambda_zip" {
   type        = "zip"
