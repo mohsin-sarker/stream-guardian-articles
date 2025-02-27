@@ -49,7 +49,7 @@ jobs:
           make run-checks
   
   build-lambda-package:
-    name: Build Lambda Package
+    name: Build Lambda Package and Deploy with Terraform
     runs-on: ubuntu-latest
     needs: build
 
