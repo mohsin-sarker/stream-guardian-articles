@@ -61,19 +61,19 @@ jobs:
 
       - name: Install dependencies for Lambda
         run: |
-          pip install --no-cache-dir -r src/requirements.txt -t package/
+          pip install --no-cache-dir -r src/requirements.txt -t packages/
           
       - name: List contents of package directory after pip install
         run: |
-          ls -al package/
+          ls -al packages/
 
       - name: Copy Lambda Function Code
         run: |
-          cp src/lambda_handler.py package/
+          cp src/lambda_handler.py packages/
           
       - name: List contents of package directory after copying Lambda code
         run: |
-          ls -al package/
+          ls -al packages/
 
   deploy-terraform:
     name: deploy-terraform
