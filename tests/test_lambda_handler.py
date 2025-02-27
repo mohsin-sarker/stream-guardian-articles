@@ -8,7 +8,8 @@ from unittest.mock import patch, MagicMock
 from src.lambda_handler import (
                                 GuardianAPIError,
                                 get_guardian_api_key,
-                                extract_guardian_articles
+                                extract_guardian_articles,
+                                transform_articles
                             )
 
 
@@ -56,14 +57,30 @@ def mock_guardian_articles():
         "response" : {
             "results" : [
                 {
-                    "webPublicationDate": "2023-11-21T11:11:31Z",
-                    "webTitle": "Who said what: using machine learning to correctly attribute quotes",
-                    "webUrl": "https://www.theguardian.com/info/2023/nov/21/who-said-what-using-machine-learning"
+                    "id": "commentisfree/2025/feb/26/what-i-have-learned-in-my-filthy-bloody-sisyphean-quest-to-tame-my-garden",
+                    "type": "article",
+                    "sectionId": "commentisfree",
+                    "sectionName": "Opinion",
+                    "webPublicationDate": "2025-02-26T15:29:36Z",
+                    "webTitle": "What I have learned in my filthy, bloody, sisyphean quest to tame my garden | Adrian Chiles",
+                    "webUrl": "https://www.theguardian.com/commentisfree/2025/feb/26/what-i-have-learned-in-my-filthy-bloody-sisyphean-quest-to-tame-my-garden",
+                    "apiUrl": "https://content.guardianapis.com/commentisfree/2025/feb/26/what-i-have-learned-in-my-filthy-bloody-sisyphean-quest-to-tame-my-garden",
+                    "isHosted": False,
+                    "pillarId": "pillar/opinion",
+                    "pillarName": "Opinion"
                 },
                 {
-                    "webPublicationDate": "2023-11-21T11:11:31Zyziur1234",
-                    'webTitle': 'Machine Learning Breakthrough',
-                    'webUrl': 'https://example.com/article1'
+                    "id": "fashion/2025/feb/26/my-big-red-carpet-makeover-what-i-learned-from-the-stylists-to-the-stars",
+                    "type": "article",
+                    "sectionId": "fashion",
+                    "sectionName": "Fashion",
+                    "webPublicationDate": "2025-02-26T05:00:03Z",
+                    "webTitle": "My big red carpet makeover: what I learned from the stylists to the stars",
+                    "webUrl": "https://www.theguardian.com/fashion/2025/feb/26/my-big-red-carpet-makeover-what-i-learned-from-the-stylists-to-the-stars",
+                    "apiUrl": "https://content.guardianapis.com/fashion/2025/feb/26/my-big-red-carpet-makeover-what-i-learned-from-the-stylists-to-the-stars",
+                    "isHosted": False,
+                    "pillarId": "pillar/lifestyle",
+                    "pillarName": "Lifestyle"
                 }
             ]
         }
@@ -87,6 +104,28 @@ def mock_empty_articles():
     mock_response.status_code = 200
     
     return mock_response, mock_data['response']['results']
+
+
+@pytest.fixture(scope='function')
+def mock_extracted_articles():
+    mock_articles = [
+        {
+            "webPublicationDate": "2023-11-21T11:11:31Z",
+            "webTitle": "Who said what: using machine learning to correctly attribute quotes",
+            "webUrl": "https://www.theguardian.com/info/2023/nov/21/who-said-what-using-machine-learning"
+        },
+        {
+            "webPublicationDate": "2023-11-21T11:11:31Zyziur1234",
+            'webTitle': 'Machine Learning Breakthrough',
+            'webUrl': 'https://example.com/article1'
+        }
+    ]
+    return mock_articles
+
+
+@pytest.fixture(scope='function')
+def mock_empty_extracted_articles():
+    return []
 
 
 class TestSecretsManager:
@@ -151,6 +190,7 @@ class TestExtractGuardianArticles:
                 with patch('requests.get', return_value=mock_response):
                     result = extract_guardian_articles('machine learning')
                     assert result == expected_data
+                    assert isinstance(result, list)
     
     
     
@@ -164,7 +204,38 @@ class TestExtractGuardianArticles:
                 with patch('requests.get', return_value=mock_response):
                         result = extract_guardian_articles('machine learning')
                         assert result == expected_data
+                        assert len(result) == 0
                         
 
 class TestTransformArticlesData:
-    pass                    
+    
+    @pytest.mark.it('Test transform_articles function returns mock articles')
+    def test_transform_articles_return_mock_articles(self, mock_extracted_articles):
+        with patch('src.lambda_handler.extract_guardian_articles', return_value=mock_extracted_articles) as mock_articles:
+            result = transform_articles("machine learning")
+            
+            expected = [[key for key, value in article.items()] for article in result]
+
+            mock_articles.assert_called_once()
+            for article in result:
+                for key in expected[0]:
+                    assert key in article
+            assert result == mock_extracted_articles
+            
+            
+
+    @pytest.mark.it('Test transform_articles function returns an empty list.')
+    def test_transform_articles_function_returns_an_empty_list(self, mock_empty_extracted_articles):
+         with patch('src.lambda_handler.extract_guardian_articles', return_value=mock_empty_extracted_articles):
+             result = transform_articles("machine learning")
+             assert result == []
+    
+    
+    @pytest.mark.it('Test transform_articles function returns articles with expected key-values.')
+    def test_transform_articles_returns_articles_with_expected_key_value_pairs(self, mock_extracted_articles):
+        with patch('src.lambda_handler.extract_guardian_articles', return_value=mock_extracted_articles):
+            result = transform_articles("machine learning")
+            expected_keys = ["webPublicationDate", "webTitle", "webUrl"]
+            for article in result:
+                for key in expected_keys:
+                    assert key in article
