@@ -56,7 +56,7 @@ variable "guardian_api_key" {
 
 variable "lambda_function_name" {
     type = string
-    default = "guardian_articles_handler"
+    default = "lambda_handler"
     description = "Name of the Lambda funcation"
 }
 
