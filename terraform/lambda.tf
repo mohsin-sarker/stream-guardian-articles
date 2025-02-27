@@ -16,7 +16,7 @@ resource "aws_lambda_function" "guardian_lambda_function" {
   function_name = var.lambda_function_name
   role = aws_iam_role.guardian_lambda_role.arn
   filename = data.archive_file.lambda_zip.output_path
-  handler = "guardian_articles_handler.${var.lambda_function_name}"
+  handler = "lambda_handler.${var.lambda_function_name}"
   runtime = "python3.12"
   source_code_hash = data.archive_file.lambda_zip.output_base64sha256
 
