@@ -13,8 +13,8 @@
 # Archive a directory to create a package.
 data "archive_file" "lambda_zip" {
   type        = "zip"
-  source_dir = "${path.module}/packages"
-  output_path = "${path.module}/packages/lambda_function.zip"
+  source_dir = "${path.module}/../packages"
+  output_path = "${path.module}/../packages/lambda_function.zip"
 }
 
 
