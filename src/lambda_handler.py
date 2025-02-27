@@ -140,9 +140,29 @@ def extract_guardian_articles(search_term, date_from=None):
 
 
 
-def transform_articles():
-    articles = extract_guardian_articles(get_search_term)
-    return articles
+def transform_articles(get_search_term):
+    try:
+        articles = extract_guardian_articles(get_search_term)
+    except:
+        error = 'Failed to fetch articles'
+        logger.error(error)
+        return []
+    
+    if not articles:
+        warning = 'No articles have been found!'
+        logger.warning(warning)
+        return []
+    
+    filtered_articles = [
+        {
+            "webPublicationDate": article.get("webPublicationDate"),
+            "webTitle": article.get("webTitle"),
+            "webUrl": article.get("webUrl", "#")
+        }
+        for article in articles if article.get("webUrl")
+    ]
+    return filtered_articles
+
 
 
 def send_to_sqs(articles):
