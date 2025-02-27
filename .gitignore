@@ -11,5 +11,5 @@ venv
 terraform.tfstate
 .terraform.lock.hcl
 **/.terraform/
-/package/
+/packages/
 lambda_function.zip
