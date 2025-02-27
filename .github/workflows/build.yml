@@ -47,6 +47,20 @@ jobs:
         run: |
           source venv/bin/activate
           make run-checks
+  
+  build-lambda-package:
+    name: Build Lambda Package
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Install dependencies for Lambda
+        run: |
+          pip install --no-cache-dir -r src/requirements.txt -t package/
+      
+      - name: Copy Lambda Function Code
+        run: |
+          cp src/lambda_handler.py package/
 
   deploy-terraform:
     name: deploy-terraform
