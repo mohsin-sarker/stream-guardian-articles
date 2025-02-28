@@ -12,9 +12,10 @@ logger = logging.getLogger('Guardian_articles_lambda_logger')
 logger.setLevel(logging.INFO)
 
 
-# Get search_term and date_from from environment variables 
-get_search_term = os.environ.get('machine learning')
-date_from = os.environ.get('2025-01-31')
+#It requires to create lambda environment variables (e.g, SEARCH_TERM & DATE_FROM) 
+# Get SEARCH_TERM and DATE_FROM from environment variables
+get_search_term = os.environ.get('SEARCH_TERM')
+date_from = os.environ.get('DATE_FROM')
 
 class GuardianAPIError(Exception):
     pass
@@ -24,7 +25,22 @@ class NoArticlesFoundError(Exception):
 
 
 def lambda_handler(event, context):
+    """
+    Function will retrieve all content returned by the API and post up to the ten most recent 
+    items in JSON format onto the message broker with the ID "guardian_content". 
+    """
     logger.info('Function has been invoked!')
+    logger.info('Fetching Guardian Contents from Guardina API.....')
+    
+    articles = transform_articles(get_search_term)
+    
+    if not articles:
+        warning = 'No articles found or unable to fetched !'
+        logger.warning(warning)
+        raise NoArticlesFoundError(warning)
+    
+    logger.info(f'Publishing {len(articles)} articles to SQS......')
+    send_to_sqs(articles)
 
 
 
@@ -86,6 +102,7 @@ def extract_guardian_articles(search_term, date_from=None):
         raise ValueError(error_message)
 
     # Retrieve secret name and check validation
+    # Terraform should create SECRET_NAME environment variable
     secret_name = os.environ.get('SECRET_NAME')
     
     if not secret_name:
@@ -140,9 +157,18 @@ def extract_guardian_articles(search_term, date_from=None):
 
 
 
-def transform_articles(get_search_term):
+def transform_articles(get_search_term, date_from=None):
+    """
+    Get extracted data based on get_search_term and transform to be published on message queue.
+
+    Args:
+        get_search_term (str): search term should string.
+
+    Returns:
+        A list of Dictionary after processing raw data. Empty list if no articles.
+    """
     try:
-        articles = extract_guardian_articles(get_search_term)
+        articles = extract_guardian_articles(get_search_term, date_from=date_from)
     except:
         error = 'Failed to fetch articles'
         logger.error(error)
@@ -166,14 +192,42 @@ def transform_articles(get_search_term):
 
 
 def send_to_sqs(articles):
+    """
+        The function will accept a list articles and publish to AWS SQS.
+        The SQS service deployment will be automated by Terraform and hold messages for 3 days.
+        Once SQS will be deployed, QueueURL will be set on lambda environment variable.
+
+    Args:
+        articles (list): The articles should a list of dictionary
+    """
+    # Retrieve sqs_queue_url from lambda environment
     queue_url = os.environ.get('SQS_QUEUE_URL')
+    
+    if not queue_url or queue_url.strip() == "":
+        error = 'SQS URL may not be set in environment or not availabe.'
+        logger.error(error)
+        raise ValueError(error)
+    
+    # Create a SQS Client to send message
     sqs_client = boto3.client('sqs')
     
+    # check if there are valid list of articles or not empty
+    if not articles or not isinstance(articles, list):
+        error = 'Articles must be a list of dictionaries and must not be empty!'
+        logger.error(error)
+        raise NoArticlesFoundError(error)
+    
     for article in articles:
-        response = sqs_client.send_message(
-            QueueUrl=queue_url,
-            MessageBody=json.dumps(article)
-        )
-        print(response['MessageId'])
+        try:
+            response = sqs_client.send_message(
+                QueueUrl=queue_url,
+                MessageBody=json.dumps(article)
+            )
+            logger.info(f'Message sent to SQS. MessageId : {response['MessageId']}')
+        
+        except Exception as e:
+            error = f'Exception: {e}'
+            logger.exception(error)
+            raise
 
 
