@@ -223,7 +223,7 @@ def send_to_sqs(articles):
                 QueueUrl=queue_url,
                 MessageBody=json.dumps(article)
             )
-            logger.info(f'Message sent to SQS. MessageId : {response['MessageId']}')
+            logger.info(f"Message sent to SQS. MessageId : {response['MessageId']}")
         
         except Exception as e:
             error = f'Exception: {e}'
