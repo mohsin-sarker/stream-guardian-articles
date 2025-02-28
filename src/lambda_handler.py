@@ -44,7 +44,6 @@ def lambda_handler(event, context):
     return {
         'status_code': 200,
         'message': f'Successfylly processed and sent {len(articles)} articles to SQS.',
-        'messageId': messageId,
         'success': True
     }
 
