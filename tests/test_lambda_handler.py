@@ -7,9 +7,11 @@ from moto import mock_aws
 from unittest.mock import patch, MagicMock
 from src.lambda_handler import (
                                 GuardianAPIError,
+                                NoArticlesFoundError,
                                 get_guardian_api_key,
                                 extract_guardian_articles,
-                                transform_articles
+                                transform_articles,
+                                send_to_sqs
                             )
 
 
@@ -32,6 +34,15 @@ def sm_client(aws_credentials):
     with mock_aws():
         yield boto3.client('secretsmanager', region_name='eu-west-2')
         
+
+@pytest.fixture(scope='function')
+def sqs_client(aws_credentials):
+    """
+    Return a AWS Simple Service Client as sqs client
+    """
+    with mock_aws():
+        yield boto3.client('sqs', region_name='eu-west-2')
+
 
 @pytest.fixture(scope='function')
 def create_secret(sm_client):
@@ -239,3 +250,61 @@ class TestTransformArticlesData:
             for article in result:
                 for key in expected_keys:
                     assert key in article
+                    
+
+class TestSendArticlesToSQS:
+    
+    @pytest.mark.it('Test send_to_sqs function checks an empty sqs url.')
+    def test_send_to_sqs_function_checks_empty_url(self):
+        with patch.dict(os.environ, {}, clear=True):
+            with pytest.raises(ValueError, match='SQS URL may not be set in environment or not availabe.'):
+                send_to_sqs([])
+                
+                
+    @pytest.mark.it('Test send_to_sqs function checks a valid sqs url.')
+    def test_send_to_sqs_function_checks_valid_url(self, sqs_client):
+        """Test should not raise any ValueError if there is a valid URL in the environment."""
+        queue_url = 'https://sqs.eu-west-2.amazonaws.com/123456789012/MyQueue'
+        with patch.dict(os.environ, {'SQS_QUEUE_URL': queue_url}):
+            mock_sqs = MagicMock()
+            mock_sqs.send_message.return_value = {"MessageId": "123456"}
+            with patch('boto3.client', return_value=mock_sqs):
+                try:
+                    send_to_sqs([{"key": "value"}])
+                except ValueError:
+                    pytest.fail('Unexpected ValueError!')
+                
+    
+
+    @pytest.mark.it('Test send_to_sqs function checks a empty string in sqs url.')
+    def test_send_to_sqs_function_checks_empty_string_url(self):
+        with patch.dict(os.environ, {'SQS_QUEUE_URL': ""}):
+            with pytest.raises(ValueError, match='SQS URL may not be set in environment or not availabe.'):
+                send_to_sqs([])
+                
+                
+                
+    @pytest.mark.it('Test send_to_sqs function raises error on empty or invalid articles.')
+    def test_send_to_sqs_function_raises_error_on_empty_or_invalid_articles(self):
+        queue_url = 'https://sqs.eu-west-2.amazonaws.com/123456789012/MyQueue'
+        with patch.dict(os.environ, {'SQS_QUEUE_URL': queue_url}):
+            with pytest.raises(NoArticlesFoundError, match='Articles must be a list of dictionaries and must not be empty!'):
+                send_to_sqs([])
+            with pytest.raises(NoArticlesFoundError, match='Articles must be a list of dictionaries and must not be empty!'):
+                send_to_sqs(None)
+            
+            # If function called with valid list of articles, message should be sent
+            # mock the boto3.client to make sure not send to AWS
+            mock_sqs = MagicMock()
+            mock_sqs.send_message.return_value = {"MessageId": "123456"}
+            with patch('boto3.client', return_value = mock_sqs):
+                mock_data = [{"Article1": "value1"}, {"Article2": "value2"}]
+                send_to_sqs(mock_data)
+                
+                # For double check to make sure send_message is called with correct parameters
+                for article in mock_data:
+                    mock_sqs.send_message.assert_any_call(
+                        QueueUrl=queue_url,
+                        MessageBody=json.dumps(article)
+                    )
+            
