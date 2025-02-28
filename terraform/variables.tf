@@ -14,7 +14,7 @@ variable "s3_bucket_name" {
 
 variable "queue_name" {
     type = string
-    default = "guardian_queue"
+    default = "guardian_content"
     description = "Name of the AWS SQS queue"
 }
 
