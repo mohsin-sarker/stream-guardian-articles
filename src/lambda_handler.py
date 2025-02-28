@@ -40,7 +40,13 @@ def lambda_handler(event, context):
         raise NoArticlesFoundError(warning)
     
     logger.info(f'Publishing {len(articles)} articles to SQS......')
-    send_to_sqs(articles)
+    messageId = send_to_sqs(articles)
+    return {
+        'status_code': 200,
+        'message': f'Successfylly processed and sent {len(articles)} articles to SQS.',
+        'messageId': messageId,
+        'success': True
+    }
 
 
 
