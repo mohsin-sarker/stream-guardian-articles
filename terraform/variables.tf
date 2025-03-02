@@ -40,6 +40,13 @@ variable "secret_name" {
 }
 
 
+variable "search_term" {
+    type = string
+    default = "machine learning"
+    description = "Name of the search term for API call"
+}
+
+
 variable "secrets_manager_policy" {
     type = string
     default = "secrets-manager-policy"

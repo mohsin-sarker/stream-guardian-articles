@@ -24,6 +24,7 @@ resource "aws_lambda_function" "guardian_lambda_function" {
     variables = {
       SECRET_NAME = aws_secretsmanager_secret.guardian_api_key_secret.name
       SQS_QUEUE_URL = aws_sqs_queue.guardian_queue.url
+      SEARCH_TERM = var.search_term
     }
   }
 
