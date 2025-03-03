@@ -3,17 +3,21 @@ import requests
 import json
 import boto3
 import logging
-from botocore.exceptions import ClientError, NoCredentialsError
+import datetime
 from pprint import pprint
+from botocore.exceptions import (
+                                    ClientError,
+                                    NoCredentialsError
+                                )
 
 
 # Intialise logging to log in info to cloudwatch
 logger = logging.getLogger('Guardian_articles_lambda_logger')
 logger.setLevel(logging.INFO)
 
-
-#It requires to create lambda environment variables (e.g, SEARCH_TERM & DATE_FROM) 
-# Get SEARCH_TERM and DATE_FROM from environment variables
+ 
+# Get SEARCH_TERM and DATE_FROM (optional) from environment variables
+# SEARCH_TERM is set to Lambda Environment Variable by terraform
 get_search_term = os.environ.get('SEARCH_TERM')
 date_from = os.environ.get('DATE_FROM')
 
@@ -32,7 +36,16 @@ def lambda_handler(event, context):
     logger.info('Function has been invoked!')
     logger.info('Fetching Guardian Contents from Guardina API.....')
     
-    articles = transform_articles(get_search_term)
+    bucket_name = 'guardian-articles-config-bucket'
+    
+    if not api_request_count(bucket_name):
+        return {
+            "status_code": 429,
+            "message": "API Request calls has been reached for Today.",
+            'success': False
+        }
+    
+    articles = processed_guardian_articles(get_search_term)
     
     if not articles:
         warning = 'No articles found or unable to fetched !'
@@ -162,12 +175,12 @@ def extract_guardian_articles(search_term, date_from=None):
 
 
 
-def transform_articles(get_search_term, date_from=None):
+def processed_guardian_articles(get_search_term, date_from=None):
     """
     Get extracted data based on get_search_term and transform to be published on message queue.
 
     Args:
-        get_search_term (str): search term should string.
+        get_search_term (str): search term should be a string.
 
     Returns:
         A list of Dictionary after processing raw data. Empty list if no articles.
@@ -198,7 +211,7 @@ def transform_articles(get_search_term, date_from=None):
 
 def send_to_sqs(articles):
     """
-        The function will accept a list articles and publish to AWS SQS.
+        The function will accept a list of articles and publish it to AWS SQS.
         The SQS service deployment will be automated by Terraform and hold messages for 3 days.
         Once SQS will be deployed, QueueURL will be set on lambda environment variable.
 
@@ -236,3 +249,69 @@ def send_to_sqs(articles):
             raise
 
 
+def api_request_count(bucket_name):
+    """
+    Get and Update API Request Data in S3 bucket:
+        - Get API Request Data from S3 bucket
+        - Check whether it's today if not reset the tracking data
+        - Return False if api request is reached
+        - Allow more API request if not more than 50
+    
+    Returns:
+        Boolean: Function returns True if API Call limit less than 50 for a day.
+    """
+    
+    s3_client = boto3.client('s3')
+    bucket_name = bucket_name
+    file_name = 'api_request_tracker.json'
+    today = str(datetime.date.today())
+    
+    try:
+        response = s3_client.get_object(
+            Bucket=bucket_name,
+            Key=file_name
+        )
+        tracking_data = json.loads(response['Body'].read().decode('utf-8'))
+        
+    except s3_client.exceptions.NoSuchKey:
+        tracking_data = {
+            "date": str(today),
+            "count": 0
+        }
+    
+    # Check and reset tracking data if not today
+    if tracking_data['date'] != today:
+        # reset tracking date
+        tracking_data = {
+            "date": today,
+            "count": 0
+        }
+    
+    # Check API Request limit
+    if tracking_data['count'] >= 50:
+        warning = 'API request limit has reached!'
+        logger.warning(warning)
+        return False
+    
+    tracking_data['count'] += 1
+    s3_client.put_object(
+        Bucket=bucket_name,
+        Key=file_name,
+        Body=json.dumps(tracking_data)
+    )
+    return True
+
+
+# def get_tracker():
+#     s3_client = boto3.client('s3')
+#     bucket_name = 'guardian-articles-config-bucket'
+#     file_name = 'api_request_tracker.json'
+    
+#     response = s3_client.get_object(
+#         Bucket=bucket_name,
+#         Key=file_name
+#     )
+#     data = json.loads(response['Body'].read().decode('utf-8'))
+#     return data
+
+# pprint(api_request_count())
