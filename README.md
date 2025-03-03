@@ -59,12 +59,16 @@ This the local structrue before push it to Github:
 
 ### Clone Repository
 
-    - "git clone https://github.com/mohsin-sarker/stream-guardian-articles.git"
+    - git clone https://github.com/mohsin-sarker/stream-guardian-articles.git
     - cd stream-guardian-articles
 
 ### Virtual Environment
 
 Make sure you're going to create virtual environment and activae to start working.
+For Mac User: 
+
+    - python -m venv venv
+    - source venv/bin/activate
 
 ### Add a Package Directory for Lambda
 
@@ -82,14 +86,18 @@ Ensure AWS Credentials and Guardian API Key are properly configured in Github Se
     - AWS_REGION
     - SAFETY_API_KEY (This is new Safety requirement for Safety Run. Need to register for free to get the KEY.)
 
-For local using: 
-    run in terminal
+For local using, run in the terminal:
+
     - aws configure
 
 
-### Terraform State Management
+### Terraform State Management & Store API Request Count
 
-Before deployment, ensure you will have a AWS S3 bucket with a unique bucket name. Change Backend Bucket name ["guardian-articles-config-bucket"] in main.tf so terraform state management will be stored and update during deployment.
+Before deployment, ensure you will have a AWS S3 bucket with a unique bucket name. Change Backend Bucket name ["guardian-articles-config-bucket"] in main.tf and also bucket name in lambda_handler function so terraform state management will be stored and update during deployment.
+
+    Change Buckter from main.tf and lambd_handler():
+
+        - Change bucket name ["guardian-articles-config-bucket"] to your bucket name
 
 ### Lambda Environment Variables
 
@@ -97,11 +105,13 @@ Before or After deployment, a defualt searh term as "machine learning" is create
 
 ### Push it Github for Automated Demployment
 
-The Github action is set up to:
+The Github action is set-up to:
+
     - Deploy Terraform whenever pushing to main
     - Deploy updated Lambda Function when functionality changed
 
-push it to Github:
+ Push it to Github:
+
     - git add .
     - git commit -m "commit message"
     - git push origin main
@@ -110,12 +120,13 @@ push it to Github:
 ## Test Deployment
 
 To trigger the Lambda Function from terminal:
+
     - aws lambda invoke --function-name <your-lambda-function-name> response.json
     - cat response.json
 
 ## Destroy AWS Resources (Manually) to Cleanup
 
 To cleanup AWS Resources, run:
-    - terraform destroy (It may ask to provide GUARDIAN_API_KEY to continue cleaning process)
-    Or
+
+    - terraform destroy (It may ask to provide GUARDIAN_API_KEY to continue cleaning process) Or
     - terraform destory -auto-approve

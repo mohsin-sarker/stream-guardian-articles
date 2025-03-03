@@ -2,7 +2,7 @@ import pytest
 import boto3
 import json
 import os
-import logging
+import datetime
 from moto import mock_aws
 from unittest.mock import patch, MagicMock
 from src.lambda_handler import (
@@ -10,8 +10,9 @@ from src.lambda_handler import (
                                 NoArticlesFoundError,
                                 get_guardian_api_key,
                                 extract_guardian_articles,
-                                transform_articles,
-                                send_to_sqs
+                                processed_guardian_articles,
+                                send_to_sqs,
+                                api_request_count
                             )
 
 
@@ -25,6 +26,27 @@ def aws_credentials():
     os.environ["AWS_SESSION_TOKEN"] = "testing"
     os.environ["AWS_DEFAULT_REGION"] = "eu-west-2"
     
+
+@pytest.fixture(scope='function')
+def s3_client(aws_credentials):
+    """
+    Return a AWS S3 Client as s3_client
+    """
+    with mock_aws():
+        yield boto3.client('s3', region_name='eu-west-2')
+
+
+@pytest.fixture(scope='function')
+def create_s3_bucket(s3_client):
+    """
+    Create a mock S3 Bucket.
+    """
+    bucket_name = "fake-bucket"
+    s3_client.create_bucket(
+        Bucket=bucket_name,
+        CreateBucketConfiguration={"LocationConstraint": "eu-west-2"}
+    )
+
 
 @pytest.fixture(scope='function')
 def sm_client(aws_credentials):
@@ -141,7 +163,7 @@ def mock_empty_extracted_articles():
 
 class TestSecretsManager:
     
-    @pytest.mark.it('Funtion will return secret value from AWS Secret Manager')
+    @pytest.mark.it('Test Funtion will return secret value from AWS Secret Manager')
     def test_get_guardian_api_key_from_secret_manager(self, create_secret):
         """Test function retrieve secret from AWS Secret Manager successfully"""
         # Arrange
@@ -155,7 +177,7 @@ class TestSecretsManager:
         assert result['GUARDIAN_API_KEY'] == '93b56eed745en5-5851-4501-a953jd50'
      
         
-    @pytest.mark.it('Function will return ClientError')
+    @pytest.mark.it('Test Function will return ClientError')
     def test_get_guardian_api_key_returns_secret_not_found(self, create_secret):
         """Test function retrieve no secret found in Secret Manager"""
         # Arrange
@@ -218,12 +240,12 @@ class TestExtractGuardianArticles:
                         assert len(result) == 0
                         
 
-class TestTransformArticlesData:
+class TestProcessedGuardianArticlesData:
     
-    @pytest.mark.it('Test transform_articles function returns mock articles')
-    def test_transform_articles_return_mock_articles(self, mock_extracted_articles):
+    @pytest.mark.it('Test processed__guardian_articles function returns mock articles')
+    def test_processed_guardian_articles_return_mock_articles(self, mock_extracted_articles):
         with patch('src.lambda_handler.extract_guardian_articles', return_value=mock_extracted_articles) as mock_articles:
-            result = transform_articles("machine learning")
+            result = processed_guardian_articles("machine learning")
             
             expected = [[key for key, value in article.items()] for article in result]
 
@@ -235,17 +257,17 @@ class TestTransformArticlesData:
             
             
 
-    @pytest.mark.it('Test transform_articles function returns an empty list.')
-    def test_transform_articles_function_returns_an_empty_list(self, mock_empty_extracted_articles):
+    @pytest.mark.it('Test processed_guardian_articles function returns an empty list.')
+    def test_processed_guardian_articles_function_returns_an_empty_list(self, mock_empty_extracted_articles):
          with patch('src.lambda_handler.extract_guardian_articles', return_value=mock_empty_extracted_articles):
-             result = transform_articles("machine learning")
+             result = processed_guardian_articles("machine learning")
              assert result == []
     
     
-    @pytest.mark.it('Test transform_articles function returns articles with expected key-values.')
-    def test_transform_articles_returns_articles_with_expected_key_value_pairs(self, mock_extracted_articles):
+    @pytest.mark.it('Test processed_guardian_articles function returns articles with expected key-values.')
+    def test_processed_guardian_articles_returns_articles_with_expected_key_value_pairs(self, mock_extracted_articles):
         with patch('src.lambda_handler.extract_guardian_articles', return_value=mock_extracted_articles):
-            result = transform_articles("machine learning")
+            result = processed_guardian_articles("machine learning")
             expected_keys = ["webPublicationDate", "webTitle", "webUrl"]
             for article in result:
                 for key in expected_keys:
@@ -307,4 +329,43 @@ class TestSendArticlesToSQS:
                         QueueUrl=queue_url,
                         MessageBody=json.dumps(article)
                     )
-            
+
+
+class TestApiRequestCount:
+    
+    @pytest.mark.it('Test a mock S3 fake bucket has been created.')
+    def test_a_fake_s3_bucket_is_created(self, create_s3_bucket, s3_client):
+        bucket_name = 'fake-bucket'
+        
+        # Verify that a s3 fake bucket is created
+        response = s3_client.list_buckets()
+        buckets = [bucket['Name'] for bucket in response['Buckets']]
+        assert bucket_name in buckets
+    
+    
+    @pytest.mark.it('Test api_request_count return True if no file in the bucket to track')
+    def test_function_returns_true_if_no_file_in_the_bucket_to_track(self, create_s3_bucket):
+        """
+        Test api_request_count function returns True even bucket has no object.
+        Create a new object once call the function first time. 
+        """
+        bucket_name = 'fake-bucket'
+        
+        response = api_request_count(bucket_name)
+        
+        assert response
+        
+    
+    @pytest.mark.it('Test api_request_count checks bucket has at least one object after first api call.')
+    def test_function_return_one_object_after_first_api_call(self, create_s3_bucket, s3_client):
+        """
+        Test api_request_count function returns True even bucket has no object.
+        Create a new object once call the function first time. 
+        """
+        bucket_name = 'fake-bucket'
+        api_request_count(bucket_name)
+        
+        response = s3_client.list_objects(Bucket=bucket_name)
+        
+        assert 'Contents' in response
+        assert len(response['Contents']) == 1
