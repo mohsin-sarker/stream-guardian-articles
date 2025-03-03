@@ -2,7 +2,7 @@ import pytest
 import boto3
 import json
 import os
-import datetime
+import requests
 from moto import mock_aws
 from unittest.mock import patch, MagicMock
 from src.lambda_handler import (
@@ -12,7 +12,8 @@ from src.lambda_handler import (
                                 extract_guardian_articles,
                                 processed_guardian_articles,
                                 send_to_sqs,
-                                api_request_count
+                                api_request_count,
+                                get_content_preview
                             )
 
 
@@ -145,12 +146,14 @@ def mock_extracted_articles():
         {
             "webPublicationDate": "2023-11-21T11:11:31Z",
             "webTitle": "Who said what: using machine learning to correctly attribute quotes",
-            "webUrl": "https://www.theguardian.com/info/2023/nov/21/who-said-what-using-machine-learning"
+            "webUrl": "https://www.theguardian.com/info/2023/nov/21/who-said-what-using-machine-learning",
+            "content_preview": "It's chaos as small jobs become big jobs, tools disappear and distractions lead to furious frustration."
         },
         {
             "webPublicationDate": "2023-11-21T11:11:31Zyziur1234",
             'webTitle': 'Machine Learning Breakthrough',
-            'webUrl': 'https://example.com/article1'
+            'webUrl': 'https://example.com/article1',
+            "content_preview": "There's no such thing as gardener's block, I once read."
         }
     ]
     return mock_articles
@@ -245,15 +248,22 @@ class TestProcessedGuardianArticlesData:
     @pytest.mark.it('Test processed__guardian_articles function returns mock articles')
     def test_processed_guardian_articles_return_mock_articles(self, mock_extracted_articles):
         with patch('src.lambda_handler.extract_guardian_articles', return_value=mock_extracted_articles) as mock_articles:
-            result = processed_guardian_articles("machine learning")
-            
-            expected = [[key for key, value in article.items()] for article in result]
+            with patch('src.lambda_handler.get_content_preview') as mock_content_preview:
+                mock_content_preview.side_effect = [
+                    "It's chaos as small jobs become big jobs, tools disappear and distractions lead to furious frustration.",
+                    "There's no such thing as gardener's block, I once read."   
+                ]
+                
+                result = processed_guardian_articles("machine learning")
+                
+                expected = [[key for key, value in article.items()] for article in result]
 
-            mock_articles.assert_called_once()
-            for article in result:
-                for key in expected[0]:
-                    assert key in article
-            assert result == mock_extracted_articles
+                mock_articles.assert_called_once()
+                for article in result:
+                    for key in expected[0]:
+                        assert key in article
+                        
+                assert result == mock_extracted_articles
             
             
 
@@ -369,3 +379,32 @@ class TestApiRequestCount:
         
         assert 'Contents' in response
         assert len(response['Contents']) == 1
+        
+
+class TestContentPreview:
+    """
+    Minimal test for fetching contents successfully or return exception message.
+    """
+    
+    @pytest.mark.it('Test function returns contents successfully with a valid url')
+    def test_function_returns_contents_successfully_with_valid_url(self):
+        with patch('requests.get') as mock_request:
+            mock_text = "<html><body><p>This is a test article content.</p></body></html>"
+            mock_request.return_value.status_code = 200
+            mock_request.return_value.text = mock_text
+            
+            mock_url = "https://example.com/test-article"
+            result = get_content_preview(mock_url)
+            
+            assert result == 'This is a test article content.'
+            
+    @pytest.mark.it('Test function returns an exception with side effect if invalid url')
+    def test_function_returns_exception_message_with_invalid_url(self):
+        with patch('requests.get') as mock_request:
+            side_effect = 'Network error!'
+            mock_request.side_effect = requests.exceptions.RequestException(side_effect)
+            
+            mock_url = "https://example.com/invalid-article"
+            result = get_content_preview(mock_url)
+            
+            assert result == 'Content fetching error: Network error!'
