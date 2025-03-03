@@ -1,20 +1,20 @@
 # Streaming Data Project: Guardian Articles to Message Broker (AWS SQS) 
 
-An application to retrieve real-time articles from the Guardian API and Publish it to AWS Simple Queue Service (SQS) to be consumed for analysis purpose. The project is deploying using a streaming pipeline. The infrastructure is deployed usin Terraform and CI/CD pipeline is set up for automated deployment.
+An application to retrieve real-time articles from the Guardian API and Publish it to AWS Simple Queue Services (SQS) to be consumed for analysis purpose. The project is being deployed using a streaming pipeline. The infrastructure is deployed using Terraform and CI/CD pipeline is set-up for automated deployment.
 
 ## Project Features
 
     - Fetch Guardian Articles from the Guardian API.
     - Publish Messages to an AWS SQS Service.
     - Extracting articles using AWS Lambda and send to AWS SQS.
-    - Infrastructure as Code (IaC) for the project using Terraform.
+    - Infrastructure as Code (IaC) for building the project using Terraform.
     - CI/CD pipeline for automated deployment.
     - Store Terraform State Management to S3 bucket to update deployement.
-    - AWS Secrets Manager to store secret and Github Action Environment Variabels.
+    - AWS Secrets Manager to store secrets and Github Action Environment Variabels.
 
 ## Prerequisites
 
-Before runing the project, you mush ensure to have the following installed:
+Before running the project, you must ensure to have the following installed:
 
     - Python latest
     - Terraform
@@ -26,7 +26,7 @@ Before runing the project, you mush ensure to have the following installed:
 
 ## Project Structure
     
-This the local structrue before push it to Github:
+This the local structrue before pushing onto Github:
 
     |--- STREAM-GUARDIAN-ARTICLES
     |    |--- .github/workflows
@@ -64,7 +64,7 @@ This the local structrue before push it to Github:
 
 ### Virtual Environment
 
-Make sure you're going to create virtual environment and activae to start working.
+Make sure you're going to create virtual environment and activate to start working.
 For Mac User: 
 
     - python -m venv venv
@@ -93,15 +93,15 @@ For local using, run in the terminal:
 
 ### Terraform State Management & Store API Request Count
 
-Before deployment, ensure you will have a AWS S3 bucket with a unique bucket name. Change Backend Bucket name ["guardian-articles-config-bucket"] in main.tf and also bucket name in lambda_handler function so terraform state management will be stored and update during deployment.
+Before deployment, ensure you will have a AWS S3 bucket with a unique bucket name. Change Backend Bucket name ["guardian-articles-config-bucket"] in main.tf and also bucket name in lambda_handler function so terraform state management will be stored and API Request can be updated during deployment.
 
-    Change Buckter from main.tf and lambd_handler():
+    Change Bucket name from main.tf and lambd_handler():
 
         - Change bucket name ["guardian-articles-config-bucket"] to your bucket name
 
 ### Lambda Environment Variables
 
-Before or After deployment, a defualt searh term as "machine learning" is created during deployment. Check terraform variables to replace ["search_teram] variable. Or It can be changed after demployment from Lambda Configuration (Environment Variables).
+Before or After deployment, a defualt searh term as "machine learning" is created during deployment. Check terraform variables to replace ["search_term] variable. Or It can be changed after demployment from Lambda Configuration (Environment Variables).
 
 ### Push it Github for Automated Demployment
 

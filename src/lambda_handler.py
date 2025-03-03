@@ -4,6 +4,7 @@ import json
 import boto3
 import logging
 import datetime
+from bs4 import BeautifulSoup
 from pprint import pprint
 from botocore.exceptions import (
                                     ClientError,
@@ -177,7 +178,8 @@ def extract_guardian_articles(search_term, date_from=None):
 
 def processed_guardian_articles(get_search_term, date_from=None):
     """
-    Get extracted data based on get_search_term and transform to be published on message queue.
+    Get extracted data based on get_search_term and process them to publish on message queue.
+    Get also content preview and add to publish contents.
 
     Args:
         get_search_term (str): search term should be a string.
@@ -196,15 +198,29 @@ def processed_guardian_articles(get_search_term, date_from=None):
         warning = 'No articles have been found!'
         logger.warning(warning)
         return []
+
+    filtered_articles = []
     
-    filtered_articles = [
-        {
+    for article in articles:
+        webUrl = article.get("webUrl")
+        if not webUrl:
+            continue
+        
+        try:
+            content_preview = get_content_preview(webUrl)
+            
+        except Exception as e:
+            warning = f'Failed to fetch content preview from the url {webUrl}: {e}'
+            logger.warning(warning)
+            content_preview = 'Content preview is not avaiable.'
+        
+        filtered_articles.append({
             "webPublicationDate": article.get("webPublicationDate"),
             "webTitle": article.get("webTitle"),
-            "webUrl": article.get("webUrl", "#")
-        }
-        for article in articles if article.get("webUrl")
-    ]
+            "webUrl": webUrl,
+            "content_preview": content_preview
+        })
+            
     return filtered_articles
 
 
@@ -247,6 +263,7 @@ def send_to_sqs(articles):
             error = f'Exception: {e}'
             logger.exception(error)
             raise
+
 
 
 def api_request_count(bucket_name):
@@ -302,16 +319,35 @@ def api_request_count(bucket_name):
     return True
 
 
-# def get_tracker():
-#     s3_client = boto3.client('s3')
-#     bucket_name = 'guardian-articles-config-bucket'
-#     file_name = 'api_request_tracker.json'
-    
-#     response = s3_client.get_object(
-#         Bucket=bucket_name,
-#         Key=file_name
-#     )
-#     data = json.loads(response['Body'].read().decode('utf-8'))
-#     return data
 
-# pprint(api_request_count())
+def get_content_preview(url, max_length=1000):
+    """
+    The function will get a url to scrap its data from the web using the URL.
+    The first 1000 characters will be stored.
+
+    Args:
+        url (str): Name of the URL to scrap data from the site.
+        max_length (int, optional): Store content preview upto 1000 characters.
+    """
+    
+    try:
+        # Adding headers to mimic the real browser
+        headers = {"User-Agent": "Mozilla/5.0"}
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        
+        soup = BeautifulSoup(response.text, "html.parser")
+        contents = soup.find_all('p')
+        content_preview = " ".join([content.get_text(strip=True) for content in contents])
+        
+        logger.info(f'Successfully pulled content data from the {url}')
+        
+        return content_preview[:max_length] if content_preview else 'No content is avaiable!'
+    
+    except requests.exceptions.RequestException as e:
+        error = f'Exception: Error has been occurred to pull content from {url}: {e}'
+        logger.error(error)
+        return f'Content fetching error: {e}'
+
+
+pprint(processed_guardian_articles('machine learning'))
